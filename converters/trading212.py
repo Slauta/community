@@ -1,29 +1,19 @@
-#!/usr/bin/env python3
-
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-# ]
-# ///
-
-import argparse
-import csv
-import os
 from datetime import datetime
 from decimal import Decimal
-from pathlib import Path
 from typing import TextIO
 
 
 BROKER = 'T212'
 
 
-def convert_trading212(infile: TextIO) -> tuple[list[dict], list[dict]]:
+def convert_trading212(infile):
     """Convert Trading 212 CSV to trade and income row dicts.
 
     Returns:
         Tuple of (trade_rows, income_rows).
     """
+    import csv
+
     trade_rows = []
     income_rows = []
 
@@ -44,7 +34,7 @@ def convert_trading212(infile: TextIO) -> tuple[list[dict], list[dict]]:
     return trade_rows, income_rows
 
 
-def _convert_trade_row(row: dict) -> dict:
+def _convert_trade_row(row):
     action = row['Action'].strip()
     direction = 'BUY' if action == 'Market buy' else 'SELL'
 
@@ -93,7 +83,7 @@ def _convert_trade_row(row: dict) -> dict:
     }
 
 
-def _convert_interest_row(row: dict) -> dict:
+def _convert_interest_row(row):
     operation_datetime = _parse_datetime(row['Time'].strip())
     settlement_date = operation_datetime.date()
     gross_amount = row['Total'].strip()
@@ -113,7 +103,7 @@ def _convert_interest_row(row: dict) -> dict:
     }
 
 
-def _convert_dividend_row(row: dict) -> dict:
+def _convert_dividend_row(row):
     operation_datetime = _parse_datetime(row['Time'].strip())
     settlement_date = operation_datetime.date()
     symbol = row['Ticker'].strip()
@@ -151,44 +141,9 @@ def _convert_dividend_row(row: dict) -> dict:
     }
 
 
-def _parse_datetime(datetime_str: str) -> datetime:
+def _parse_datetime(datetime_str):
     """Parse Trading 212 datetime: 2025-07-22 10:06:57 or 2025-07-22 10:06:57.358"""
     try:
         return datetime.strptime(datetime_str, '%Y-%m-%d %H:%M:%S.%f')
     except ValueError:
         return datetime.strptime(datetime_str, '%Y-%m-%d %H:%M:%S')
-
-
-def _write_csv(outfile: TextIO, rows: list[dict]) -> None:
-    writer = csv.DictWriter(outfile, fieldnames=list(rows[0].keys()))
-    writer.writeheader()
-    writer.writerows(rows)
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('input', type=argparse.FileType('r'), help='Input Trading 212 CSV file')
-    parser.add_argument('--trades-output', help='Output trades CSV')
-    parser.add_argument('--income-output', help='Output income CSV')
-
-    args = parser.parse_args()
-
-    trade_rows, income_rows = convert_trading212(args.input)
-    stem = Path(args.input.name).stem
-    suffix = os.urandom(3).hex()
-
-    if trade_rows:
-        trades_path = args.trades_output or f'result_trades_{stem}_{suffix}.csv'
-        with open(trades_path, 'w') as f:
-            _write_csv(f, trade_rows)
-        print(f"Wrote {len(trade_rows)} trade(s) → {trades_path}")
-
-    if income_rows:
-        income_path = args.income_output or f'result_income_{stem}_{suffix}.csv'
-        with open(income_path, 'w') as f:
-            _write_csv(f, income_rows)
-        print(f"Wrote {len(income_rows)} income record(s) → {income_path}")
-
-
-if __name__ == '__main__':
-    main()

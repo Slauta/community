@@ -1,19 +1,6 @@
-#!/usr/bin/env python3
-
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "openpyxl",
-# ]
-# ///
-
-import argparse
-import csv
 import hashlib
-import os
 import re
 from decimal import Decimal
-from pathlib import Path
 
 from openpyxl import load_workbook
 
@@ -21,7 +8,7 @@ from openpyxl import load_workbook
 BROKER = 'Freedom'
 
 
-def convert_freedom(workbook_path: str) -> tuple[list[dict], list[dict]]:
+def convert_freedom(workbook_path):
     """Convert Freedom Finance Excel report to trade and income row dicts.
 
     Returns:
@@ -41,7 +28,7 @@ def convert_freedom(workbook_path: str) -> tuple[list[dict], list[dict]]:
 
         direction = _normalize_direction(row.get('Direction'))
 
-        # Equity swap SELL with profit → INTEREST income
+        # Equity swap SELL with profit -> INTEREST income
         if instrument == 'Equity swap':
             if direction != 'SELL':
                 continue
@@ -71,7 +58,7 @@ def _iter_sheet_dicts(sheet):
         yield dict(zip(headers, values))
 
 
-def _normalize_direction(value) -> str:
+def _normalize_direction(value):
     v = str(value).upper().strip()
     if 'BUY' in v:
         return 'BUY'
@@ -80,7 +67,7 @@ def _normalize_direction(value) -> str:
     return ''
 
 
-def _parse_decimal(value) -> Decimal:
+def _parse_decimal(value):
     if value is None:
         return Decimal('0')
     if isinstance(value, (int, float)):
@@ -88,7 +75,7 @@ def _parse_decimal(value) -> Decimal:
     return Decimal(str(value).strip())
 
 
-def _parse_currency_amount(value) -> Decimal:
+def _parse_currency_amount(value):
     """Parse values like '4.00USD', '-0.60000000USD'."""
     if value is None:
         return Decimal('0')
@@ -101,14 +88,14 @@ def _parse_currency_amount(value) -> Decimal:
     return Decimal(s)
 
 
-def _format_trade_id(value) -> str:
+def _format_trade_id(value):
     """Format Trade# which Freedom stores as a numeric cell."""
     if isinstance(value, float) and value == int(value):
         return str(int(value))
     return str(value) if value else ''
 
 
-def _convert_trade_row(row: dict, direction: str) -> dict:
+def _convert_trade_row(row, direction):
     settlement_date = str(row.get('Settlement date', ''))
     isin = str(row.get('ISIN') or '')
     country = isin[:2] if len(isin) >= 2 else ''
@@ -130,7 +117,7 @@ def _convert_trade_row(row: dict, direction: str) -> dict:
     }
 
 
-def _convert_equity_swap_row(row: dict, profit: Decimal) -> dict:
+def _convert_equity_swap_row(row, profit):
     settlement_date = str(row.get('Settlement date', ''))
 
     return {
@@ -146,12 +133,12 @@ def _convert_equity_swap_row(row: dict, profit: Decimal) -> dict:
     }
 
 
-def _convert_dividend_row(row: dict) -> dict:
+def _convert_dividend_row(row):
     date_val = str(row.get('Date', ''))
     ticker = str(row.get('Ticker', ''))
     wht = abs(_parse_currency_amount(row.get('Tax Withheld by Broker')))
 
-    # No unique ID in income sheet — generate deterministic one
+    # No unique ID in income sheet -- generate deterministic one
     tx_id = hashlib.md5(f'{ticker}:{date_val}'.encode()).hexdigest()
 
     return {
@@ -165,38 +152,3 @@ def _convert_dividend_row(row: dict) -> dict:
         'operation_datetime': date_val,
         'settlement_date': date_val,
     }
-
-
-def _write_csv(outfile, rows: list[dict]) -> None:
-    writer = csv.DictWriter(outfile, fieldnames=list(rows[0].keys()))
-    writer.writeheader()
-    writer.writerows(rows)
-
-
-def main():
-    parser = argparse.ArgumentParser(description='Convert Freedom Finance Excel report to CSV')
-    parser.add_argument('input', help='Input Freedom Finance .xlsx file')
-    parser.add_argument('--trades-output', help='Output trades CSV')
-    parser.add_argument('--income-output', help='Output income CSV')
-
-    args = parser.parse_args()
-
-    trade_rows, income_rows = convert_freedom(args.input)
-    stem = Path(args.input).stem
-    suffix = os.urandom(3).hex()
-
-    if trade_rows:
-        trades_path = args.trades_output or f'result_trades_{stem}_{suffix}.csv'
-        with open(trades_path, 'w') as f:
-            _write_csv(f, trade_rows)
-        print(f"Wrote {len(trade_rows)} trade(s) → {trades_path}")
-
-    if income_rows:
-        income_path = args.income_output or f'result_income_{stem}_{suffix}.csv'
-        with open(income_path, 'w') as f:
-            _write_csv(f, income_rows)
-        print(f"Wrote {len(income_rows)} income record(s) → {income_path}")
-
-
-if __name__ == '__main__':
-    main()
