@@ -36,6 +36,12 @@ def convert_freedom_ru(workbook_path):
             continue
 
         direction_raw = str(row.get('Операция', '')).strip().lower()
+
+        if 'своп' in direction_raw:
+            if _parse_decimal(row.get('Прибыль')) > 0:
+                income_rows.append(_convert_swap_row(row))
+            continue
+
         direction = _DIRECTION_MAP.get(direction_raw, '')
         if not direction:
             continue
@@ -107,6 +113,26 @@ def _convert_trade_row(row, direction):
         'commission': str(abs(_parse_currency_amount(row.get('Комиссия')))),
         'operation_datetime': settlement_date,
         'settlement_date': settlement_date,
+    }
+
+
+def _convert_swap_row(row):
+    """Convert a 'Своп акциями' row from ExecTrades sheet → income INTEREST."""
+    ticker = str(row.get('Тикер', '')).strip()
+    date_val = str(row.get('Дата расчетов', '')).strip()
+    amount = _parse_decimal(row.get('Прибыль'))
+    tx_id = hashlib.md5(f'{ticker}:{date_val}:своп акциями'.encode()).hexdigest()
+
+    return {
+        'broker': BROKER,
+        'tx_id': tx_id,
+        'income_type': 'INTEREST',
+        'symbol': ticker,
+        'currency': str(row.get('Валюта', '')).strip(),
+        'gross_amount': str(amount),
+        'wht_amount': '0',
+        'operation_datetime': date_val,
+        'settlement_date': date_val,
     }
 
 
